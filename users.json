@@ -1,0 +1,21 @@
+{
+  "dg_drift": {
+    "username": "dg_drift",
+    "display_name": "DG DRIFT",
+    "password_hash": "da9e02ead7f9834766d3d8c4168568df$d50aec7107d11fb7555d350d7356f74817db54f49fc8540d6b064c47472e8d3f",
+    "role": "admin",
+    "basic_credits": 993,
+    "premium_credits": 98,
+    "created_at": 1792298173.8871918,
+    "seeded": true
+  },
+  "tanu721430": {
+    "username": "tanu721430",
+    "display_name": "TANU721430",
+    "password_hash": "f023d46991f90e1984200865f2f8799d$b68efc2f899bea880fe437a80516a8a8055a783adf5862d863d88e802d008467",
+    "role": "user",
+    "basic_credits": 998,
+    "premium_credits": 1000,
+    "created_at": 1792305158.488409
+  }
+}

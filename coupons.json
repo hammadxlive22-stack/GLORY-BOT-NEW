@@ -1,0 +1,22 @@
+{
+  "NAJF-4TJ2-YQ95": {
+    "code": "NAJF-4TJ2-YQ95",
+    "created_by": "dg_drift",
+    "basic_credits": 4,
+    "premium_credits": 13,
+    "status": "cancelled",
+    "created_at": 1792305690.8415956,
+    "used_by": null,
+    "used_at": null
+  },
+  "F78Q-UBY5-BFKT": {
+    "code": "F78Q-UBY5-BFKT",
+    "created_by": "dg_drift",
+    "basic_credits": 1,
+    "premium_credits": 1,
+    "status": "cancelled",
+    "created_at": 1792305830.5688717,
+    "used_by": null,
+    "used_at": null
+  }
+}
