@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 # ═══════════════════════════════════════════════════════════════════
-#  TEAM TANU — Squad Bot (BR ONLY)
-#  ✓ Squad Create/Invite/Accept/PK
-#  ✓ Auto Clan Join (OB55) + DRIFT pages
-#  ✓ ID Band Fix (cooldown)
-#  ✓ Captured Payloads + Full Sequences
-#  ✓ 5 Special Packets
-#  ✓ Jump Replay
+#  TEAM TANU — Squad Bot (Create → Invite → Accept → PK → In-Game)
+#  + Auto Clan Join (OB55) + FFGlory DRIFT pages
+#  🔧 ID BAND FIX (cooldown) + Syntax Error Fixed
 # ═══════════════════════════════════════════════════════════════════
 import sys, asyncio, httpx, random, json, socket, struct, time, os, uuid
 import itertools, secrets, traceback, base64
@@ -30,6 +26,7 @@ import RbcFF_pb2
 import thunderFF_pb2
 
 from dashboard_server import bot_state, start_web_dashboard
+# ⭐ NEW: Clan join module
 from clan_join import join_clan_bulk, join_clan_single, fetch_clan_info
 
 
@@ -85,16 +82,6 @@ MOVEMENT_STATE_JUMP_CHANCE   = 0.08
 MOVEMENT_STATE_CROUCH_CHANCE = 0.06
 MOVEMENT_STATE_PRONE_CHANCE  = 0.06
 
-# ==================== 🏃 SPECIAL MOVEMENT CONFIG ====================
-MOVEMENT_ENABLED            = True
-MOVEMENT_JUMP_CHANCE        = 0.08
-MOVEMENT_REPLAY_ENABLED     = True
-EJECT_ENABLED               = True
-PARACHUTE_ENABLED           = True
-TOUCHDOWN_ENABLED           = True
-AIRPLANE_ENABLED            = True
-MAINTENANCE_ENABLED         = True
-
 ENABLE_HTTP_PING = True
 PING_INTERVAL    = 20.0
 PING_TIMEOUT     = 8.0
@@ -115,41 +102,12 @@ TEAM_HEARTBEAT_INTERVAL = 3.0
 TEAM_IDLE_ITERS_TEAM    = 1800
 TEAM_MEMBER_START_DELAY = 20.0
 TEAM_FINAL_WAIT         = 8.0
-TEAM_READY_DELAY        = 5.0
-_accept_friend_request  = True
+TEAM_SIZE = 4
+TEAM_READY_DELAY = 5.0
+_accept_friend_request = True
 DEBUG_TEAM_PACKETS      = True
 
-# ==================== CAPTURED PAYLOADS ====================
-CAPTURED_MOVEMENT_PACKETS = [
-    "69582222f3250f22818080088ef576ef1fc6ac416400ad0100c80100e11300010a9bb1f6f70300e0c8f9fa0b000049000000c0a603",
-    "68402222f3250e22818080088ef576bd2cc6ac416400ad01000000a3150001009bb1f6f70300e0c8f9fa0b0000490000009fa703",
-    "644d2222f3250e22818080088ef576bd2cc6ac416400ad01000000e5160001009bb1f6f70300e0c8f9fa0b00004900000086a803",
-    "6b542222f3250e22818080088ef576bd2cc6ac416400ad01000000a7180001009bb1f6f70300e0c8f9fa0b000049000000e9a803",
-    "6c4d2222f3250e22818080088ef576bd2cc6ac416400ad01000000e9190001009bb1f6f70300e0c8f9fa0b000049000000cca903",
-    "691e2222f3250e22818080088ef576bd2cc6ac416400ad01000000ab1b0001009bb1f6f70300e0c8f9fa0b000049000000acaa03",
-]
-
-CAPTURED_JUMP_PACKETS = [
-    "68212222f32510228180800880be76a7239cf7416500ac0165ac01b10400a8070002fee78cf80bb0de9ded03cfa5ebfa03000068000000d2fe03",
-    "6d592222f325102281808008d4b976fb22bcfe416500ac0165ac01b10400a8070002fee78cf80bb0de9ded03cfa5ebfa03000068000000bdff03",
-    "64392222f325102281808008a8b576cf22dc85426500ac0165ac01b10400a8070002fee78cf80bb0de9ded03cfa5ebfa03000068000000988004",
-    "6d6f2222f32510228180800882b176a722fe8c426300ae0165ac01a30400b0070002d3fed1f70bbfab89ed03808480fb03000068000000858104",
-    "640a2222f3251022818080089cad76ad22c494425300b60159b201c90300e0070002fff5c8f60bbeab89ed03d694a2fb03000068000000de8104",
-]
-
-CAPTURED_AIRPLANE_PACKETS = [
-    "6a222222f3250222000201ccc39a01e0dc2ab0d3686900a90100000000000300be012d2c00000105",
-]
-
-CAPTURED_PARACHUTE_PACKETS = [
-    "6d0b2222f32516228180800894d47afeb510c4a347af01005f00c801e105b7178f0302009debd4f90bbbc5dff80b908791f60b000045000000a5cc02",
-]
-
-CAPTURED_TOUCHDOWN_PACKETS = [
-    "69582222f3250f22818080088ef576ef1fc6ac416400ad0100c80100e11300010a9bb1f6f70300e0c8f9fa0b000049000000c0a603",
-]
-
-# 🔧 ID BAND FIX
+# 🔧 ID BAND FIX — নতুন ৭ লাইন (কোনো বিদ্যমান কোড পরিবর্তন হয়নি)
 _last_connect_time: Dict[str, float] = {}
 _last_match_end_time: Dict[str, float] = {}
 _connect_attempts: Dict[str, int] = {}
@@ -181,31 +139,42 @@ def bypass_human_reconnect_delay(attempt):
     return max(0.05, min(attempt * 0.5, 2.0) + random.uniform(-0.4, 0.7))
 
 
+# 🔧 ID BAND FIX — নতুন ৫টা helper function
 def _get_connection_cooldown(uid: str) -> float:
     uid = str(uid)
     last = _last_connect_time.get(uid, 0)
     elapsed = time.time() - last
     attempts = _connect_attempts.get(uid, 0)
-    base = CONNECTION_COOLDOWN_MAX if attempts > 3 else random.uniform(CONNECTION_COOLDOWN_MIN, CONNECTION_COOLDOWN_MAX)
-    if elapsed >= base: return 0.0
+    if attempts > 3:
+        base = CONNECTION_COOLDOWN_MAX
+    else:
+        base = random.uniform(CONNECTION_COOLDOWN_MIN, CONNECTION_COOLDOWN_MAX)
+    if elapsed >= base:
+        return 0.0
     return base - elapsed
+
 
 def _record_connect(uid: str):
     uid = str(uid)
     _last_connect_time[uid] = time.time()
     _connect_attempts[uid] = _connect_attempts.get(uid, 0) + 1
 
+
 def _record_match_end(uid: str):
     _last_match_end_time[str(uid)] = time.time()
+
 
 def _get_match_end_cooldown(uid: str) -> float:
     uid = str(uid)
     last = _last_match_end_time.get(uid, 0)
-    if not last: return 0.0
+    if not last:
+        return 0.0
     elapsed = time.time() - last
     base = random.uniform(MATCH_END_COOLDOWN_MIN, MATCH_END_COOLDOWN_MAX)
-    if elapsed >= base: return 0.0
+    if elapsed >= base:
+        return 0.0
     return base - elapsed
+
 
 def _reset_connect_attempts(uid: str):
     _connect_attempts[str(uid)] = 0
@@ -381,21 +350,27 @@ async def _get_total_match_count():
 
 # ═══════════════════════════ PENDING CLAN HELPERS ═══════════════════════════
 def _get_pending_clan(region):
+    """Get pending clan for this region from bot_state.pending_clans."""
     try:
         pending = getattr(bot_state, 'pending_clans', {})
-        if not pending: return None
+        if not pending:
+            return None
         key = str(region).upper() if region else None
         entry = pending.get(key)
         if not entry:
             entry = next(iter(pending.values()), None)
             if entry: key = None
-        if not entry: return None
-        if entry.get('joined'): return None
+        if not entry:
+            return None
+        if entry.get('joined'):
+            return None
         if time.time() - entry.get('launched_at', 0) > 1800:
             if key: pending.pop(key, None)
             return None
         return entry
-    except Exception: return None
+    except Exception:
+        return None
+
 
 def _mark_pending_clan_joined(region):
     try:
@@ -405,13 +380,19 @@ def _mark_pending_clan_joined(region):
         if entry:
             entry['joined'] = True
             entry['joined_at'] = time.time()
-    except Exception: pass
-    
+    except Exception:
+        pass
+
 
 # ═══════════════════════════ SQUAD STATE ═══════════════════════════
 _team_state = {
-    "peers": {}, "leader_uid": None, "team_code": None, "pk_code": None,
-    "members": set(), "members_lock": asyncio.Lock(), "lock": asyncio.Lock(),
+    "peers": {},
+    "leader_uid": None,
+    "team_code": None,
+    "pk_code": None,
+    "members": set(),
+    "members_lock": asyncio.Lock(),
+    "lock": asyncio.Lock(),
 }
 
 async def _team_member_join(uid):
@@ -918,10 +899,8 @@ async def send_keep_alive(region="ID"):
         return bytes.fromhex("0219" if reg == "ID" else ("0214" if reg == "IND" else "0215"))
     except Exception:
         return bytes.fromhex("0219")
-        
-        
-        
-        
+
+
 # ═══════════════════════════ MATCH SEARCH PACKETS ═══════════════════════════
 BR_HEX = (
     "080112800a0a010110013a110a044944433110aa011a064555524f50453a100a044944433210311a064555524f5045"
@@ -957,7 +936,7 @@ BR_HEX = (
 async def start_game_battle_royale(region, client_version, writer, key, iv):
     packet = bytes.fromhex(BR_HEX)
     try:
-        proto = RbcFF_pb2.StartMatch(); proto.ParseFromString(packet)
+        proto = CguFF_pb2.StartMatch(); proto.ParseFromString(packet)
         if hasattr(proto.main, 'region_list') and len(proto.main.region_list) > 0:
             proto.main.region_list[0].region = region
             if len(proto.main.region_list) > 1: proto.main.region_list[1].region = region
@@ -1275,7 +1254,6 @@ async def build_movement_packet_2001(key_bytes, msg_key, player_state, x, y, z,
     h[1] = (await crc7_buff(0, bytes(h[2:]) + body)) & 0x7F
     return bytes(h) + body
 
-
 class MovementTracker:
     PLAYER_STATE = {"idle":0, "walk":1, "run":2, "sprint":3, "jump":4, "crouch":5, "prone":6}
     def __init__(self, pattern="circle", radius=180):
@@ -1342,7 +1320,6 @@ class MovementTracker:
         else: x, y, z, move_state = self._generate_movement()
         return ps, x, y, z, move_state, self.tick, self.counter, self.speed_multiplier, self.state
 
-
 async def movement_worker(sock, ip, port, udp_key_bytes, match_code, account_id, stop_event, match_index):
     loop = asyncio.get_event_loop(); addr = (ip, port)
     tracker = MovementTracker(pattern=MOVEMENT_PATTERN, radius=MOVEMENT_RADIUS)
@@ -1352,9 +1329,8 @@ async def movement_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
         while not stop_event.is_set():
             try:
                 ps, x, y, z, ms, tick, cnt, sm, st = tracker.next()
-                # 🔧 FIX: phase="game"
                 pkt = await build_movement_packet_2001(udp_key_bytes, 0x6B, ps, x, y, z, tick, cnt, ms,
-                                                       account_id, match_code, phase="game")
+                                                       account_id, match_code, phase="arena")
                 await loop.sock_sendto(sock, pkt, addr); sent += 1
                 if sent % 30 == 0: print_info(f"[MOVE] #{match_index} sent={sent} {st}({ps}) rate={sm}x")
                 base = MOVEMENT_TICK_MS / 1000.0
@@ -1368,7 +1344,6 @@ async def movement_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
             except Exception: await asyncio.sleep(0.5)
     except asyncio.CancelledError: pass
     finally: print_info(f"[MOVE] #{match_index} stopped sent={sent}")
-
 
 async def send_anti_afk_fire(sock, addr, udp_key_bytes, match_code, account_id):
     try:
@@ -1406,220 +1381,14 @@ async def anti_afk_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
         if fires > 0: print_info(f"[AFK] #{match_index} Fires={fires}")
 
 
-# ═══════════════════════════ 🦘 JUMP REPLAY (CAPTURED) ═══════════════════════════
-async def jump_replay_loop(sock, server_addr, udp_key_bytes, match_code,
-                            account_id, stop_event, match_index=0):
-    loop = asyncio.get_event_loop()
-    jump_count = 0
-    print_info(f"[MATCH #{match_index}] 🦘 Jump replay started")
-    try:
-        await asyncio.sleep(random.uniform(2.0, 4.0))
-        while not stop_event.is_set():
-            try:
-                pkt_hex = random.choice(CAPTURED_JUMP_PACKETS)
-                pkt = bytes.fromhex(pkt_hex)
-                await loop.sock_sendto(sock, pkt, server_addr)
-                jump_count += 1
-                interval = random.uniform(2.0, 5.0)
-                try:
-                    await asyncio.wait_for(stop_event.wait(), timeout=interval)
-                    break
-                except asyncio.TimeoutError: pass
-            except asyncio.CancelledError: break
-            except Exception as e:
-                print_warning(f"[MATCH #{match_index}] Jump fail: {e}")
-                await asyncio.sleep(1.0)
-    except asyncio.CancelledError: pass
-    finally: print_info(f"[MATCH #{match_index}] 🦘 Jump stopped | Total: {jump_count}")
-
-
-# ═══════════════════════════ 🎯 5 SPECIAL PACKETS ═══════════════════════════
-async def send_time_sync(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    loop = asyncio.get_event_loop()
-    try:
-        ts = int(time.time() * 1000) & 0xFFFFFFFF
-        pid = int(account_id)
-        body = bytearray()
-        body += struct.pack("<I", pid & 0xFFFFFFFF)
-        body += struct.pack("<I", ts)
-        body += b"\x00" * 8
-        nr = (await layouts_from_mask(match_code))[1]
-        pkt = await build_packet(0x64, nr, 0, 2000, None, 1, bytes(body), udp_key_bytes, encrypted=True)
-        await loop.sock_sendto(sock, pkt, server_addr)
-        return True
-    except Exception: return False
-
-
-async def send_ping_heartbeat(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    loop = asyncio.get_event_loop()
-    try:
-        ts = int(time.time() * 1000) & 0xFFFFFFFF
-        pid = int(account_id)
-        body = bytearray()
-        body += struct.pack("<I", pid & 0xFFFFFFFF)
-        body += struct.pack("<I", ts)
-        body += b"\x00" * 4
-        nr = (await layouts_from_mask(match_code))[1]
-        pkt = await build_packet(0x69, nr, 0, 2000, None, 1, bytes(body), udp_key_bytes, encrypted=True)
-        await loop.sock_sendto(sock, pkt, server_addr)
-        return True
-    except Exception: return False
-
-
-async def send_tcp_keepalive(writer):
-    try:
-        if writer and not writer.is_closing():
-            writer.write(bytes.fromhex("0214"))
-            await writer.drain()
-            return True
-    except Exception: pass
-    return False
-
-
-async def send_ack_packet(sock, server_addr, udp_key_bytes, match_code, account_id, seq=0):
-    loop = asyncio.get_event_loop()
-    try:
-        pid = int(account_id)
-        body = bytearray()
-        body += struct.pack("<I", pid & 0xFFFFFFFF)
-        body += struct.pack("<H", seq & 0xFFFF)
-        body += b"\x00" * 6
-        nr = (await layouts_from_mask(match_code))[1]
-        pkt = await build_packet(0x68, nr, 0, 2, None, 1, bytes(body), udp_key_bytes, encrypted=True)
-        await loop.sock_sendto(sock, pkt, server_addr)
-        return True
-    except Exception: return False
-
-
-async def full_maintenance_loop(sock, server_addr, udp_key_bytes, match_code,
-                                 account_id, stop_event, writer=None, match_index=0):
-    time_sync_count = 0; ping_count = 0; tcp_count = 0
-    last_time_sync = 0; last_ping = 0; last_tcp = 0
-    print_info(f"[🔧] Maintenance loop started | Match #{match_index}")
-    try:
-        while not stop_event.is_set():
-            now = time.time()
-            if now - last_time_sync >= 10.0:
-                ok = await send_time_sync(sock, server_addr, udp_key_bytes, match_code, account_id, match_index)
-                if ok: time_sync_count += 1; last_time_sync = now
-            if now - last_ping >= 3.0:
-                ok = await send_ping_heartbeat(sock, server_addr, udp_key_bytes, match_code, account_id, match_index)
-                if ok: ping_count += 1; last_ping = now
-            if writer and now - last_tcp >= 5.0:
-                ok = await send_tcp_keepalive(writer)
-                if ok: tcp_count += 1; last_tcp = now
-            try:
-                await asyncio.wait_for(stop_event.wait(), timeout=0.5)
-                break
-            except asyncio.TimeoutError: pass
-    except asyncio.CancelledError: pass
-    finally:
-        print_info(f"[🔧] Maintenance stopped | Match #{match_index} | "
-                   f"TimeSync: {time_sync_count} | Ping: {ping_count} | TCP: {tcp_count}")
-                   
-                   
-                   
-                   
-                   
-# ═══════════════════════════ 🪂 SEQUENCES ═══════════════════════════
-async def airplane_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    loop = asyncio.get_event_loop()
-    print_info(f"[MATCH #{match_index}] ✈️ Airplane sequence (captured)")
-    try:
-        for i in range(3):
-            # 🔧 FIX: captured payload use karo
-            pkt = bytes.fromhex(random.choice(CAPTURED_AIRPLANE_PACKETS))
-            await loop.sock_sendto(sock, pkt, server_addr)
-            print_info(f"[MATCH #{match_index}] ✈️ pkt {i+1}/3 ({len(pkt)}B)")
-            await asyncio.sleep(random.uniform(0.5, 0.8))
-        print_success(f"[MATCH #{match_index}] ✈️ Airplane complete")
-    except Exception as e: print_error(f"[MATCH #{match_index}] Airplane: {e}")
-
-
-async def eject_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    loop = asyncio.get_event_loop()
-    print_info(f"[MATCH #{match_index}] 🪂 Eject sequence")
-    # 🔧 FIX: realistic BR map coordinates
-    base_x = random.randint(-40000, 40000)
-    base_z = random.randint(-40000, 40000)
-    try:
-        for i in range(3):
-            pkt = await build_movement_packet_2001(
-                udp_key_bytes, 0x64, 2,
-                base_x + random.randint(-500, 500),
-                random.randint(1500, 2500),  # eject height
-                base_z + random.randint(-500, 500),
-                i * 100, i * 50, 0x0F, int(account_id), match_code, phase="game")
-            await loop.sock_sendto(sock, pkt, server_addr)
-            print_info(f"[MATCH #{match_index}] 🪂 pkt {i+1}/3")
-            await asyncio.sleep(random.uniform(0.4, 0.7))
-        print_success(f"[MATCH #{match_index}] 🪂 Eject complete")
-    except Exception as e: print_error(f"[MATCH #{match_index}] Eject: {e}")
-
-
-async def parachute_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    loop = asyncio.get_event_loop()
-    print_info(f"[MATCH #{match_index}] 🪂 Parachute sequence (captured)")
-    try:
-        for i in range(5):
-            # 🔧 FIX: captured payload use karo
-            pkt = bytes.fromhex(random.choice(CAPTURED_PARACHUTE_PACKETS))
-            await loop.sock_sendto(sock, pkt, server_addr)
-            print_info(f"[MATCH #{match_index}] 🪂 pkt {i+1}/5")
-            await asyncio.sleep(random.uniform(0.8, 1.5))
-        print_success(f"[MATCH #{match_index}] 🪂 Parachute complete")
-    except Exception as e: print_error(f"[MATCH #{match_index}] Parachute: {e}")
-
-
-async def touchdown_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    loop = asyncio.get_event_loop()
-    print_info(f"[MATCH #{match_index}] 🦶 Touchdown sequence (captured)")
-    try:
-        for i in range(3):
-            # 🔧 FIX: captured payload use karo
-            pkt = bytes.fromhex(random.choice(CAPTURED_TOUCHDOWN_PACKETS))
-            await loop.sock_sendto(sock, pkt, server_addr)
-            print_info(f"[MATCH #{match_index}] 🦶 pkt {i+1}/3")
-            await asyncio.sleep(random.uniform(0.5, 1.0))
-        print_success(f"[MATCH #{match_index}] 🦶 Touchdown complete")
-    except Exception as e: print_error(f"[MATCH #{match_index}] Touchdown: {e}")
-
-
-async def run_full_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index=0):
-    print_colored("=" * 60, Colors.MAGENTA)
-    print_colored(f"🎬 MATCH #{match_index} — 4-phase sequence", Colors.MAGENTA)
-    print_colored("=" * 60, Colors.MAGENTA)
-    try:
-        if AIRPLANE_ENABLED:
-            await airplane_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index)
-            await asyncio.sleep(1.0)  # 🔧 FIX: zyada delay
-        if EJECT_ENABLED:
-            await eject_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index)
-            await asyncio.sleep(1.0)
-        if PARACHUTE_ENABLED:
-            await parachute_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index)
-            await asyncio.sleep(1.0)
-        if TOUCHDOWN_ENABLED:
-            await touchdown_sequence(sock, server_addr, udp_key_bytes, match_code, account_id, match_index)
-        print_colored(f"🎬 MATCH #{match_index} — Sequence done!", Colors.GREEN)
-    except Exception as e:
-        print_error(f"[MATCH #{match_index}] Sequence: {e}")
-
-
-async def start_startup_safe(fn):
-    try: await fn()
-    except Exception: pass
-
-
 # ═══════════════════════════ PLAY GAME ═══════════════════════════
 async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                     account_id, player_region, client_version, key, iv,
                     match_index, on_match_complete=None):
     t0 = time.time()
-    ping_task = anti_task = move_task = jump_task = sequence_task = maintenance_task = None
+    ping_task = anti_task = move_task = None
     sock = None
-    ping_stop = asyncio.Event(); anti_stop = asyncio.Event()
-    move_stop = asyncio.Event(); jump_stop = asyncio.Event()
+    ping_stop = asyncio.Event(); anti_stop = asyncio.Event(); move_stop = asyncio.Event()
     uid_str = str(account_id); completed = False
     try:
         ip, port = server_ip_port.split(":"); port = int(port)
@@ -1630,21 +1399,20 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
         except Exception: pass
         optimize_udp_socket(sock); sock.setblocking(False)
         udp_key_bytes = bytes.fromhex(udp_key)
-        addr = (rip, port)
         await asyncio.sleep(bypass_hello_delay())
         hello = await build_hello_packet(f"{account_id}_2585", udp_key_bytes, match_code)
-        await loop.sock_sendto(sock, bytes.fromhex(hello), addr)
+        await loop.sock_sendto(sock, bytes.fromhex(hello), (rip, port))
         ack_state = "waiting_for_hello_reply"
         thunder_sent = False; join_match_rcv = False; local_closed = False
-        send_lock = asyncio.Lock(); workers_started = False
+        send_lock = asyncio.Lock(); anti_started = False
         ping_task = asyncio.create_task(keepalive_ping(sock, rip, port, udp_key_bytes, match_code, ping_stop))
         last_activity = time.time()
         print_colored(f"[MATCH #{match_index}] UDP -> {server_ip_port} (DNS:{rip})", Colors.MAGENTA)
 
         async def start_workers():
-            nonlocal anti_task, move_task, jump_task, maintenance_task, workers_started
-            if workers_started: return
-            workers_started = True
+            nonlocal anti_task, move_task, anti_started
+            if anti_started: return
+            anti_started = True
             anti_task = asyncio.create_task(anti_afk_worker(sock, rip, port, udp_key_bytes, match_code,
                                                             account_id, anti_stop, match_index))
             print_success(f"[AFK] Worker #{match_index}")
@@ -1652,44 +1420,25 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                 move_task = asyncio.create_task(movement_worker(sock, rip, port, udp_key_bytes, match_code,
                                                                 account_id, move_stop, match_index))
                 print_success(f"[MOVE] Worker #{match_index} | {MOVEMENT_PATTERN}")
-                jump_task = asyncio.create_task(jump_replay_loop(sock, addr, udp_key_bytes, match_code,
-                                                                  account_id, jump_stop, match_index))
-                print_success(f"[🦘] Jump Worker #{match_index}")
-            if MAINTENANCE_ENABLED:
-                maintenance_task = asyncio.create_task(
-                    full_maintenance_loop(sock, addr, udp_key_bytes, match_code,
-                                          account_id, ping_stop, writer=None, match_index=match_index))
-                print_success(f"[🔧] Maintenance #{match_index}")
 
         async def send_startup():
-            nonlocal ack_state, thunder_sent, sequence_task
+            nonlocal ack_state, thunder_sent
             if thunder_sent: return
             async with send_lock:
                 if thunder_sent: return
                 try:
-                    await loop.sock_sendto(sock, bytes.fromhex(thunder), addr)
+                    await loop.sock_sendto(sock, bytes.fromhex(thunder), (rip, port))
                     thunder_sent = True
                     await asyncio.sleep(bypass_jitter(0.1, 0.05))
                     _, nr = await layouts_from_mask(match_code)
                     ack = await build_packet(0x68, nr, 0, 2, None, 1, b"\x01\x00", udp_key_bytes)
-                    await loop.sock_sendto(sock, ack, addr)
+                    await loop.sock_sendto(sock, ack, (rip, port))
                     await asyncio.sleep(bypass_jitter(0.2, 0.05))
-                    await loop.sock_sendto(sock, bytes.fromhex(sharma), addr)
+                    await loop.sock_sendto(sock, bytes.fromhex(sharma), (rip, port))
                     ack_state = "thunder_sharma_sent"
                     print_success(f"[MATCH #{match_index}] Startup delivered")
-
-                    # 🔧 FIX: 10-12s delay sequence se pehle
-                    async def _run_seq():
-                        print_info(f"[MATCH #{match_index}] ⏳ Waiting 10s for match spawn...")
-                        await asyncio.sleep(random.uniform(10.0, 12.0))
-                        print_info(f"[MATCH #{match_index}] 🎬 Starting sequence now")
-                        await run_full_sequence(sock, addr, udp_key_bytes, match_code,
-                                                 account_id, match_index)
-                        await start_workers()
-                    sequence_task = asyncio.create_task(_run_seq())
-                    print_success(f"[MATCH #{match_index}] 🎬 Sequence scheduled (+10s)")
-                except Exception as e:
-                    print_error(f"[MATCH #{match_index}] startup: {e}")
+                    await start_workers()
+                except Exception as e: print_error(f"[MATCH #{match_index}] startup: {e}")
 
         while not local_closed:
             if time.time() - t0 > MAX_MATCH_DURATION: break
@@ -1697,20 +1446,12 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                 resp, saddr = await asyncio.wait_for(loop.sock_recvfrom(sock, 65535), timeout=1.5)
                 if resp:
                     last_activity = time.time()
-                    # 🔍 DEBUG: raw UDP print karo
-                    print_colored(f"[UDP-RAW #{match_index}] len={len(resp)} hex={resp.hex()[:80]}", Colors.YELLOW)
                     frame = await decode_packet(resp, udp_key_bytes, match_code)
                     if frame:
-                        print_colored(f"[FRAME #{match_index}] cmd={frame['cmd']} kind={frame['kind']}", Colors.CYAN)
                         pt = await classify(frame)
-                        # 🔧 FIX: 107 = match end, 103 = spawn confirm
-                        if frame['cmd'] == 107:
-                            print_success(f"[MATCH #{match_index}] 🏁 MATCH ENDED cmd=107")
+                        if frame['cmd'] in [103, 107]:
+                            print_success(f"[MATCH #{match_index}] END cmd={frame['cmd']}")
                             completed = True; local_closed = True; continue
-                        if frame['cmd'] == 103:
-                            print_success(f"[MATCH #{match_index}] 🎯 SPAWN CONFIRMED cmd=103")
-                            # Sequence ab already scheduled hai
-                            continue
                         if frame['cmd'] == 101:
                             try:
                                 _, nr = await layouts_from_mask(match_code)
@@ -1746,7 +1487,7 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                     if (time.time() - last_activity) > 7.0:
                         try:
                             hp = await build_hello_packet(f"{account_id}_2585", udp_key_bytes, match_code)
-                            await loop.sock_sendto(sock, bytes.fromhex(hp), addr)
+                            await loop.sock_sendto(sock, bytes.fromhex(hp), (rip, port))
                         except Exception: pass
                         last_activity = time.time()
                     if (time.time() - t0) > 25.0:
@@ -1768,13 +1509,14 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
         if completed:
             try: bot_state.increment_match(uid_str)
             except Exception: pass
+            # 🔧 ID BAND FIX — match end time record (নতুন ২ লাইন)
             try: _record_match_end(uid_str)
             except Exception: pass
             if on_match_complete:
                 try: asyncio.create_task(on_match_complete())
                 except Exception: pass
-        anti_stop.set(); move_stop.set(); jump_stop.set()
-        for t in (anti_task, move_task, jump_task, sequence_task, maintenance_task):
+        anti_stop.set(); move_stop.set()
+        for t in (anti_task, move_task):
             if t:
                 try: await asyncio.wait_for(t, timeout=2.0)
                 except Exception:
@@ -1794,10 +1536,12 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
         print_info(f"[MATCH #{match_index}] Closed. UID:{rem} Total:{total}")
         try: bot_state.update_status(uid_str, "IN_MATCH" if rem > 0 else "ONLINE", rem)
         except Exception: pass
-        
-        
-        
-        
+
+async def start_startup_safe(fn):
+    try: await fn()
+    except Exception: pass
+
+
 # ═══════════════════════════ FRIEND REQUEST ═══════════════════════════
 async def _process_social_packet(raw_bytes, account_data, tag="MAIN"):
     try:
@@ -1947,6 +1691,7 @@ async def _handle_team_invite(hex_data, pl, uid_str, current_account_data,
                     print_success(f"[TEAM-IN {uid_str}] 👤 inviter@f{k}: {c}")
                     break
 
+        # ✅ Syntax fix: tc=None এবং for লুপ আলাদা লাইনে
         tc = None
         for k in all_f:
             c = _g(target_dict, k) or _g(dec, k)
@@ -2013,6 +1758,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
             if cd: await refresh_account_profile(cd)
         except Exception: pass
 
+    # ═══════════ LEADER: create → invite-loop → ready → start ═══════════
     async def _team_coordinator():
         try:
             deadline = time.time() + TEAM_PEER_WAIT_TIMEOUT
@@ -2036,6 +1782,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
             else:
                 print_success(f"[TEAM] ✅ All {n} peers online")
 
+            # ⭐ NEW: Join pending clan BEFORE matchmaking
             pending_clan = _get_pending_clan(account_region)
             if pending_clan:
                 clan_id = pending_clan['clan_id']
@@ -2189,14 +1936,13 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 except asyncio.TimeoutError: pass
         except asyncio.CancelledError: raise
         except Exception as e: print_warning(f"[TEAM] member outer: {e}")
-        
-        
-        
+
     try:
         while True:
             writer = None; gateway_ping_task = None
             team_coord_task = None; member_trigger_task = None
             try:
+                # 🔧 ID BAND FIX — connect করার আগে cooldown check (নতুন ৪ লাইন)
                 cooldown = _get_connection_cooldown(uid_str)
                 if cooldown > 0:
                     print_info(f"[COOLDOWN] {uid_str} waiting {cooldown:.1f}s before connect (anti-ban)")
@@ -2226,12 +1972,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                                 cache_invalidate(str(current_account_data['auth_uid']))
                             if current_account_data.get('auth_token'):
                                 cache_invalidate(f"tok_{current_account_data['auth_token'][:20]}")
-                            auth_uid = current_account_data.get('auth_uid')
-                            auth_pass = current_account_data.get('auth_password')
-                            if auth_uid and auth_pass:
-                                new_cred = await process_account_uid_pass(auth_uid, auth_pass)
-                            else:
-                                new_cred = None
+                            new_cred = await bot_state.relogin_account(uid_str, current_account_data)
                             if new_cred:
                                 current_account_data = new_cred
                                 current_key = new_cred['aes_ak']
@@ -2262,6 +2003,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 _writer_ref["w"] = writer
                 raw_sock = writer.get_extra_info('socket')
                 if raw_sock: optimize_tcp_socket(raw_sock)
+                # 🔧 ID BAND FIX — connect time record (নতুন ১ লাইন)
                 _record_connect(uid_str)
                 await asyncio.sleep(bypass_hello_delay())
                 writer.write(bytes.fromhex(current_token)); await writer.drain()
@@ -2285,6 +2027,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 last_watchdog_check = connection_start_time
                 search_attempts = 0
 
+                # ⭐ Pending clan region override (priority)
                 pending_global = getattr(bot_state, 'pending_clans', {})
                 pending_region = None
                 for reg, entry in pending_global.items():
@@ -2304,6 +2047,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
 
                 print_success(f"[FUNC] TCP connected {uid_str} (DNS:{rip} Lvl:{current_level} R:{current_search_region})")
                 reconnects = 0; no_response_count = 0; last_start_time = 0.0
+                # 🔧 ID BAND FIX — successful connect-এ attempt reset (নতুন ১ লাইন)
                 _reset_connect_attempts(uid_str)
 
                 async with _team_state["lock"]:
@@ -2850,19 +2594,26 @@ def load_accounts():
 # ═══════════════════════════ MAIN ═══════════════════════════
 async def main():
     print_colored("=" * 60, Colors.CYAN)
-    print_colored("  TEAM RBC — Squad Bot + Sequences + 5 Special Packets", Colors.GREEN)
+    print_colored("  TEAM RBC — Squad Bot (Create/Invite/Accept/PK) + Clan Join", Colors.GREEN)
     print_colored("=" * 60, Colors.CYAN)
     print_info(f"Match interval: {START_MATCH_INTERVAL}s | Offline: {NEW_MATCH_DELAY}s")
     print_info("Mode: BATTLE ROYALE ONLY | Clan Join: OB55")
-    print_info(f"Sequences: Airplane={AIRPLANE_ENABLED} Eject={EJECT_ENABLED} Parachute={PARACHUTE_ENABLED} Touchdown={TOUCHDOWN_ENABLED}")
-    print_info(f"Maintenance: {MAINTENANCE_ENABLED} | Jump Replay: {MOVEMENT_REPLAY_ENABLED}")
+    print_info(f"DRIFT folder: {DRIFT_DIR}")
     if TEAM_MODE:
         print_success(f"[SQUAD] size={TEAM_SIZE} peer_wait={TEAM_PEER_WAIT_TIMEOUT}s")
+        print_info(f"  invite_cycle={TEAM_INVITE_CYCLE_WAIT}s | max_time={TEAM_INVITE_MAX_TIME}s")
+        print_info(f"  heartbeat={TEAM_HEARTBEAT_INTERVAL}s | final_wait={TEAM_FINAL_WAIT}s")
     print_colored("=" * 60, Colors.CYAN)
 
     try:
         await start_web_dashboard(host=WEB_HOST, port=WEB_PORT)
         print_success(f"Web server: http://localhost:{WEB_PORT}")
+        print_success(f"  → Landing  : http://localhost:{WEB_PORT}/")
+        print_success(f"  → Login    : http://localhost:{WEB_PORT}/login")
+        print_success(f"  → Signup   : http://localhost:{WEB_PORT}/signup")
+        print_success(f"  → Client   : http://localhost:{WEB_PORT}/client")
+        print_success(f"  → Admin    : http://localhost:{WEB_PORT}/admin")
+        print_success(f"  → Bot Panel: http://localhost:{WEB_PORT}/bot")
     except Exception as e: print_error(f"Web server: {e}")
 
     async def on_account_added(data):
